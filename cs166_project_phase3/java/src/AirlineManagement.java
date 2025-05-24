@@ -24,6 +24,7 @@ import java.io.InputStreamReader;
 import java.util.List;
 import java.util.ArrayList;
 import java.lang.Math;
+import java.io.IOException;
 
 /**
  * This class defines a simple embedded SQL utility class that is designed to
@@ -357,6 +358,130 @@ public class AirlineManagement {
     * Creates a new user
     **/
    public static void CreateUser(AirlineManagement esql){
+    try {
+         System.out.println("========== Create New User Account ==========");
+         System.out.print("Enter First Name: ");
+         String firstName = in.readLine().trim();
+         System.out.print("Enter Last Name: ");
+         String lastName = in.readLine().trim();
+         System.out.print("Enter desired Password: ");
+         String password = in.readLine().trim();
+
+         System.out.print("Select User Role (C for Customer, P for Pilot, T for Technician): ");
+         String roleChoice = in.readLine().trim().toUpperCase();
+
+         String fullName = firstName + " " + lastName;
+         
+         // Basic escaping for single quotes. Not fully secure against SQL injection.
+         String safeFirstName = firstName.replace("'", "''");
+         String safeLastName = lastName.replace("'", "''");
+         String safePassword = password.replace("'", "''");
+         String safeFullName = fullName.replace("'", "''");
+
+
+         if (roleChoice.equals("C")) {
+            System.out.println("--- Creating Customer Account ---");
+            System.out.print("Enter Gender (M/F/Other): ");
+            String gender = in.readLine().trim();
+            System.out.print("Enter Date of Birth (YYYY-MM-DD): ");
+            String dob = in.readLine().trim(); // User needs to ensure correct format
+            System.out.print("Enter Address: ");
+            String address = in.readLine().trim();
+            System.out.print("Enter Phone Number: ");
+            String phone = in.readLine().trim();
+            System.out.print("Enter Zip Code: ");
+            String zip = in.readLine().trim();
+
+            String safeGender = gender.replace("'", "''");
+            String safeAddress = address.replace("'", "''");
+            String safePhone = phone.replace("'", "''");
+            String safeZip = zip.replace("'", "''");
+            // dob is generally safe if it's just a date string without quotes
+
+            String queryMaxId = "SELECT MAX(CustomerID) FROM Customer";
+            List<List<String>> result = esql.executeQueryAndReturnResult(queryMaxId);
+            int nextCustomerId = 1;
+            if (result != null && !result.isEmpty() && result.get(0).get(0) != null) {
+               try {
+                  nextCustomerId = Integer.parseInt(result.get(0).get(0)) + 1;
+               } catch (NumberFormatException e) {
+                  System.err.println("Warning: Could not parse max CustomerID, defaulting to 1. " + e.getMessage());
+               }
+            }
+
+            String insertQuery = String.format(
+                  "INSERT INTO Customer (CustomerID, FirstName, LastName, Password, Gender, DOB, Address, Phone, Zip) " +
+                  "VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')",
+                  nextCustomerId, safeFirstName, safeLastName, safePassword, safeGender, dob, safeAddress, safePhone, safeZip);
+            
+            esql.executeUpdate(insertQuery);
+            System.out.println("Customer account created successfully for " + fullName + " with CustomerID: " + nextCustomerId);
+
+         // Inside CreateUser, for Pilot:
+         } else if (roleChoice.equals("P")) {
+            System.out.println("--- Creating Pilot Account ---");
+            String prefix = "P";
+            
+            // Get the highest existing PilotID number
+            String maxIdQuery = "SELECT MAX(CAST(SUBSTRING(PilotID FROM 2) AS INTEGER)) FROM Pilot";
+            List<List<String>> result = esql.executeQueryAndReturnResult(maxIdQuery);
+            int nextNumericId = 1;
+            
+            if (result != null && !result.isEmpty() && result.get(0).get(0) != null) {
+                nextNumericId = Integer.parseInt(result.get(0).get(0)) + 1;
+            }
+            
+            String pilotId = prefix + String.format("%03d", nextNumericId);
+            
+            String insertQuery = String.format(
+                  "INSERT INTO Pilot (PilotID, Name, Password) VALUES ('%s', '%s', '%s')",
+                  pilotId, safeFullName, safePassword);
+            
+            try {
+               esql.executeUpdate(insertQuery);
+               System.out.println("Pilot account created successfully for " + fullName + " with PilotID: " + pilotId);
+            } catch (SQLException insertEx) {
+               System.err.println("Database error during pilot insertion: " + insertEx.getMessage());
+               return;
+            }
+            
+         } else if (roleChoice.equals("T")) {
+            System.out.println("--- Creating Technician Account ---");
+            
+            // Get the highest existing TechnicianID number
+            String maxIdQuery = "SELECT MAX(CAST(SUBSTRING(TechnicianID FROM 2) AS INTEGER)) FROM Technician";
+            List<List<String>> result = esql.executeQueryAndReturnResult(maxIdQuery);
+            int nextNumericId = 1;
+            
+            if (result != null && !result.isEmpty() && result.get(0).get(0) != null) {
+                nextNumericId = Integer.parseInt(result.get(0).get(0)) + 1;
+            }
+            
+            String technicianId = "T" + String.format("%03d", nextNumericId);
+            
+            String insertQuery = String.format(
+                  "INSERT INTO Technician (TechnicianID, Name, Password) VALUES ('%s', '%s', '%s')",
+                  technicianId, safeFullName, safePassword);
+            
+            try {
+               esql.executeUpdate(insertQuery);
+               System.out.println("Technician account created successfully for " + fullName + " with TechnicianID: " + technicianId);
+            } catch (SQLException insertEx) {
+               System.err.println("Database error during technician insertion: " + insertEx.getMessage());
+               return;
+            }
+         } else {
+            System.out.println("Invalid role selected. User account not created.");
+         }
+         System.out.println("============================================");
+
+      } catch (IOException e) {
+         System.err.println("Error reading input: " + e.getMessage());
+      } catch (SQLException e) {
+         System.err.println("Database error during user creation: " + e.getMessage());
+      } catch (Exception e) { 
+         System.err.println("An unexpected error occurred during user creation: " + e.getMessage());
+      }
    }//end CreateUser
 
 
@@ -365,7 +490,74 @@ public class AirlineManagement {
     * @return User login or null is the user does not exist
     **/
    public static String LogIn(AirlineManagement esql){
-      return null;
+      String authorisedUser = null;
+      String userNameToDisplay = ""; 
+
+      try {
+         System.out.println("============== User Login ==============");
+         System.out.print("Enter your role (Customer/Pilot/Technician): ");
+         String role = in.readLine().trim().toLowerCase(); 
+         System.out.print("Enter your ID: ");
+         String idStr = in.readLine().trim();
+         System.out.print("Enter your password: ");
+         String password = in.readLine().trim();
+
+         String query = "";
+         List<List<String>> result = null;
+         
+         // Basic escaping for single quotes. Not fully secure against SQL injection.
+         String safeIdStr = idStr.replace("'", "''");
+         String safePassword = password.replace("'", "''");
+
+         if (role.equals("customer")) {
+            try {
+                Integer.parseInt(idStr); // Basic validation for Customer ID
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid Customer ID format. Customer ID must be a number.");
+                return null;
+            }
+            query = String.format("SELECT CustomerID, FirstName, LastName FROM Customer WHERE CustomerID = %s AND Password = '%s'", safeIdStr, safePassword);
+            result = esql.executeQueryAndReturnResult(query);
+            if (result != null && !result.isEmpty()) {
+               authorisedUser = "CUSTOMER_" + result.get(0).get(0); // CustomerID
+               userNameToDisplay = result.get(0).get(1) + " " + result.get(0).get(2); // FirstName LastName
+            }
+
+         } else if (role.equals("pilot")) {
+            query = String.format("SELECT PilotID, Name FROM Pilot WHERE PilotID = '%s' AND Password = '%s'", safeIdStr, safePassword);
+            result = esql.executeQueryAndReturnResult(query);
+            if (result != null && !result.isEmpty()) {
+               authorisedUser = "PILOT_" + result.get(0).get(0); // PilotID
+               userNameToDisplay = result.get(0).get(1); // Name
+            }
+
+         } else if (role.equals("technician")) {
+            query = String.format("SELECT TechnicianID, Name FROM Technician WHERE TechnicianID = '%s' AND Password = '%s'", safeIdStr, safePassword);
+            result = esql.executeQueryAndReturnResult(query);
+            if (result != null && !result.isEmpty()) {
+               authorisedUser = "TECHNICIAN_" + result.get(0).get(0); // TechnicianID
+               userNameToDisplay = result.get(0).get(1); // Name
+            }
+         } else {
+            System.out.println("Invalid role entered. Please choose Customer, Pilot, or Technician.");
+            return null;
+         }
+
+         if (authorisedUser != null) {
+            System.out.println("\nWelcome, " + userNameToDisplay + "! (" + authorisedUser + ") You are logged in.\n");
+         } else {
+            System.out.println("\nLogin failed. Invalid ID or password for the specified role.\n");
+         }
+         System.out.println("======================================");
+
+      } catch (IOException e) {
+         System.err.println("Error reading input: " + e.getMessage());
+      } catch (SQLException e) {
+         System.err.println("Database error during login: " + e.getMessage());
+      } catch (Exception e) { 
+         System.err.println("An unexpected error occurred during login: " + e.getMessage());
+      }
+      return authorisedUser;
    }//end
 
 // Rest of the functions definition go in here

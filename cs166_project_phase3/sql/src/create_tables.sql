@@ -61,7 +61,8 @@ CREATE TABLE Customer (
     DOB DATE,
     Address TEXT,
     Phone TEXT,
-    Zip TEXT
+    Zip TEXT,
+    Password TEXT
 );
 
 -- Reservation Table
@@ -77,7 +78,8 @@ CREATE TABLE Reservation (
 -- Technician Table
 CREATE TABLE Technician (
     TechnicianID TEXT PRIMARY KEY,
-    Name TEXT
+    Name TEXT,
+    Password TEXT
 );
 
 -- Repair Table
@@ -94,7 +96,8 @@ CREATE TABLE Repair (
 -- Pilot Table
 CREATE TABLE Pilot (
     PilotID TEXT PRIMARY KEY,
-    Name TEXT
+    Name TEXT,
+    Password TEXT
 );
 
 -- MaintenanceRequest Table
